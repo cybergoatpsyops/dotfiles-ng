@@ -1,0 +1,11 @@
+# ~/.blerc
+bleopt default_keymap=vi
+bleopt canvas_winch_action=redraw-prev
+
+# Additional vi mode enhancements
+bleopt complete_auto_complete=on
+bleopt complete_auto_history=on
+
+# clear screen
+ble-bind -m vi_nmap -f 'C-l' clear-screen
+ble-bind -m vi_imap -f 'C-l' clear-screen
