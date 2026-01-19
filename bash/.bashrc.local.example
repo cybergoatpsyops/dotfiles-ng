@@ -1,0 +1,8 @@
+# ~/.bashrc.local - Machine-specific configuration (NOT in git)
+# Copy to ~/.bashrc.local and customize
+
+# Tmux aliases
+alias tm='tmux new-session -A -s main'
+alias tk='tmux kill-server'
+
+# Or use: alias tm='~/.local/bin/tmux-dev'
