@@ -1,129 +1,258 @@
+# ~/.bashrc - Cross-platform Bash configuration
+# Works on: macOS, WSL, Linux
+#
+# Load order:
+#   1. ble.sh (early attach)
+#   2. Environment detection
+#   3. Path setup
+#   4. Bash-it
+#   5. Aliases & functions
+#   6. Tool initialization
+#   7. ble.sh (late attach)
+
+# =============================================================================
+# ble.sh - Early initialization (must be at top)
+# =============================================================================
 if [[ $- == *i* ]] && [[ ! -v POETRY_ACTIVE ]] && [[ -f ~/.local/share/blesh/ble.sh ]]; then
     source ~/.local/share/blesh/ble.sh --noattach
 fi
 
-# If not running interactively, don't do anything
+# =============================================================================
+# Exit if not interactive
+# =============================================================================
 case $- in
     *i*) ;;
     *) return;;
 esac
 
-# Custom Alias
-alias vim='nvim'
-alias vi='nvim'
+# =============================================================================
+# OS Detection
+# =============================================================================
+detect_os() {
+    case "$(uname -s)" in
+        Darwin*)  echo "macos" ;;
+        Linux*)
+            if grep -qi microsoft /proc/version 2>/dev/null; then
+                echo "wsl"
+            else
+                echo "linux"
+            fi
+            ;;
+        *)        echo "unknown" ;;
+    esac
+}
 
-# Load Homebrew
-eval "$(/opt/homebrew/bin/brew shellenv)"
+export DETECTED_OS="$(detect_os)"
 
-# Load Bash-It
-export BASH_IT="$HOME/.bash_it"
-source "$BASH_IT/bash_it.sh"
-
-# source ~/gitstatus/gitstatus.prompt.sh
-
-
-# Enable showing mode in prompt
-#set show-mode-in-prompt on
-
-# Set cursor shape for different vi modes
-#set vi-cmd-mode-string "\1\e[2 q\2"  # Block cursor for command mode
-#set vi-ins-mode-string "\1\e[6 q\2"  # Bar cursor for insert mode
-
+# =============================================================================
+# Path Configuration
+# =============================================================================
+# Local bin (cross-platform)
 export PATH="${HOME}/.local/bin:${PATH}"
-#export PATH="/opt/homebrew/opt/python@3.11/bin:$PATH"
-export PATH="/opt/homebrew/Cellar/grep/3.11/libexec/gnubin:$PATH"
 
+# Doom Emacs
+[[ -d "${HOME}/.config/emacs/bin" ]] && export PATH="${HOME}/.config/emacs/bin:${PATH}"
+
+# Cargo/Rust
+[[ -f "${HOME}/.cargo/env" ]] && source "${HOME}/.cargo/env"
+
+# macOS-specific paths
+if [[ "$DETECTED_OS" == "macos" ]]; then
+    # Homebrew
+    if [[ -f /opt/homebrew/bin/brew ]]; then
+        eval "$(/opt/homebrew/bin/brew shellenv)"
+        
+        # GNU tools from Homebrew (prefer over BSD)
+        for gnubin in /opt/homebrew/Cellar/*/*/libexec/gnubin; do
+            [[ -d "$gnubin" ]] && export PATH="$gnubin:$PATH"
+        done
+    fi
+fi
+
+# Linux/WSL-specific paths
+if [[ "$DETECTED_OS" == "linux" || "$DETECTED_OS" == "wsl" ]]; then
+    # Linuxbrew (if installed)
+    if [[ -f /home/linuxbrew/.linuxbrew/bin/brew ]]; then
+        eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+    fi
+    
+    # fd is named fdfind on Ubuntu
+    if command -v fdfind &>/dev/null && ! command -v fd &>/dev/null; then
+        alias fd='fdfind'
+    fi
+fi
+
+# =============================================================================
+# History Configuration
+# =============================================================================
+HISTCONTROL=ignoreboth:erasedups
+HISTSIZE=10000
+HISTFILESIZE=20000
+shopt -s histappend
+
+# =============================================================================
+# Shell Options
+# =============================================================================
+shopt -s checkwinsize   # Update LINES/COLUMNS after each command
+shopt -s globstar 2>/dev/null  # ** matches all files and directories
+
+# =============================================================================
+# Bash-it
+# =============================================================================
+export BASH_IT="$HOME/.bash_it"
+
+if [[ -f "$BASH_IT/bash_it.sh" ]]; then
+    # Theme configuration
+    export BASH_IT_THEME='bobby-python'
+    
+    # Theme options
+    export THEME_CHECK_SUDO='true'
+    export BASH_IT_COMMAND_DURATION=true
+    export COMMAND_DURATION_MIN_SECONDS=1
+    export SCM_CHECK=true
+    
+    # Disable unused features
+    export GIT_HOSTING='git@git.domain.com'
+    unset MAILCHECK
+    export IRC_CLIENT=false
+    export TODO=false
+    
+    # Load Bash-it
+    source "$BASH_IT/bash_it.sh"
+fi
+
+# =============================================================================
+# Aliases - Editor
+# =============================================================================
+if command -v nvim &>/dev/null; then
+    alias vim='nvim'
+    alias vi='nvim'
+    export EDITOR='nvim'
+    export VISUAL='nvim'
+else
+    export EDITOR='vim'
+    export VISUAL='vim'
+fi
+
+# =============================================================================
+# Aliases - Navigation & Listing
+# =============================================================================
+alias ll='ls -alF'
+alias la='ls -A'
+alias l='ls -CF'
+
+# Color support
+if [[ "$DETECTED_OS" == "macos" ]]; then
+    alias ls='ls -G'
+    export CLICOLOR=1
+else
+    alias ls='ls --color=auto'
+    alias grep='grep --color=auto'
+    alias fgrep='fgrep --color=auto'
+    alias egrep='egrep --color=auto'
+fi
+
+# =============================================================================
+# Aliases - Git (commonly used)
+# =============================================================================
+alias gs='git status'
+alias ga='git add'
+alias gc='git commit'
+alias gp='git push'
+alias gl='git log --oneline -10'
+alias gd='git diff'
+
+# =============================================================================
+# Aliases - Safety
+# =============================================================================
+alias rm='rm -i'
+alias cp='cp -i'
+alias mv='mv -i'
+
+# =============================================================================
+# Aliases - WSL-specific
+# =============================================================================
+if [[ "$DETECTED_OS" == "wsl" ]]; then
+    # Open files in Windows default app
+    alias open='wslview'
+    alias explorer='explorer.exe .'
+    
+    # Access Windows home
+    export WINHOME="/mnt/c/Users/${USER}"
+fi
+
+# =============================================================================
+# Tool Initialization (only if installed)
+# =============================================================================
+
+# NVM (Node Version Manager)
 export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+[[ -s "$NVM_DIR/nvm.sh" ]] && source "$NVM_DIR/nvm.sh"
+[[ -s "$NVM_DIR/bash_completion" ]] && source "$NVM_DIR/bash_completion"
 
+# Gitstatus prompt
+[[ -f ~/gitstatus/gitstatus.prompt.sh ]] && source ~/gitstatus/gitstatus.prompt.sh
 
-# Path to the bash it configuration
-export BASH_IT="/Users/lbastidas/.bash_it"
+# Zoxide (smarter cd)
+command -v zoxide &>/dev/null && eval "$(zoxide init bash)"
 
-# Lock and Load a custom theme file.
-# Leave empty to disable theming.
-# location /.bash_it/themes/
-export BASH_IT_THEME='bobby-python'
-#THEME_SHOW_PYTHON='true'
-#THEME_SHOW_CLOCK='true'
-#THEME_SHOW_BATTERY='true'
+# fzf (fuzzy finder)
+[[ -f ~/.fzf.bash ]] && source ~/.fzf.bash
 
-# Some themes can show whether `sudo` has a current token or not.
-# Set `$THEME_CHECK_SUDO` to `true` to check every prompt:
-THEME_CHECK_SUDO='true'
+# direnv (directory-specific env vars)
+command -v direnv &>/dev/null && eval "$(direnv hook bash)"
 
-# (Advanced): Change this to the name of your remote repo if you
-# cloned bash-it with a remote other than origin such as `bash-it`.
-# export BASH_IT_REMOTE='bash-it'
-
-# (Advanced): Change this to the name of the main development branch if
-# you renamed it or if it was changed for some reason
-# export BASH_IT_DEVELOPMENT_BRANCH='master'
-
-# Your place for hosting Git repos. I use this for private repos.
-export GIT_HOSTING='git@git.domain.com'
-
-# Don't check mail when opening terminal.
-unset MAILCHECK
-
-# Change this to your console based IRC client of choice.
-export IRC_CLIENT=false
-
-# Set this to the command you use for todo.txt-cli
-export TODO=false
-
-# Set this to the location of your work or project folders
-#BASH_IT_PROJECT_PATHS="${HOME}/Projects:/Volumes/work/src"
-
-# Set this to false to turn off version control status checking within the prompt for all themes
-export SCM_CHECK=true
-# Set to actual location of gitstatus directory if installed
-#export SCM_GIT_GITSTATUS_DIR="$HOME/gitstatus"
-# per default gitstatus uses 2 times as many threads as CPU cores, you can change this here if you must
-#export GITSTATUS_NUM_THREADS=8
-
-# Set Xterm/screen/Tmux title with only a short hostname.
-# Uncomment this (or set SHORT_HOSTNAME to something else),
-# Will otherwise fall back on $HOSTNAME.
-#export SHORT_HOSTNAME=$(hostname -s)
-
-# Set Xterm/screen/Tmux title with only a short username.
-# Uncomment this (or set SHORT_USER to something else),
-# Will otherwise fall back on $USER.
-#export SHORT_USER=${USER:0:8}
-
-# If your theme use command duration, uncomment this to
-# enable display of last command duration.
-export BASH_IT_COMMAND_DURATION=true
-# You can choose the minimum time in seconds before
-# command duration is displayed.
-export COMMAND_DURATION_MIN_SECONDS=1
-
-# Set Xterm/screen/Tmux title with shortened command and directory.
-# Uncomment this to set.
-#export SHORT_TERM_LINE=true
-
-# Set vcprompt executable path for scm advance info in prompt (demula theme)
-# https://github.com/djl/vcprompt
-#export VCPROMPT_EXECUTABLE=~/.vcprompt/bin/vcprompt
-
-# (Advanced): Uncomment this to make Bash-it reload itself automatically
-# after enabling or disabling aliases, plugins, and completions.
-# export BASH_IT_AUTOMATIC_RELOAD_AFTER_CONFIG_CHANGE=1
-
-# Uncomment this to make Bash-it create alias reload.
-# export BASH_IT_RELOAD_LEGACY=1
-
-# Vi mode bindings for non-ble.sh shells (poetry shell, etc.)
+# =============================================================================
+# Vi Mode (for shells without ble.sh)
+# =============================================================================
 if [[ ! ${BLE_VERSION-} ]]; then
     set -o vi
     bind -m vi-command 'Control-l: clear-screen'
     bind -m vi-insert 'Control-l: clear-screen'
 fi
 
-source ~/gitstatus/gitstatus.prompt.sh
-eval "$(zoxide init bash)"
+# =============================================================================
+# Functions
+# =============================================================================
 
-# Attach ble.sh if it was loaded
+# Create and cd into directory
+mkcd() {
+    mkdir -p "$1" && cd "$1"
+}
+
+# Extract any archive
+extract() {
+    if [[ -f "$1" ]]; then
+        case "$1" in
+            *.tar.bz2)   tar xjf "$1"     ;;
+            *.tar.gz)    tar xzf "$1"     ;;
+            *.bz2)       bunzip2 "$1"     ;;
+            *.rar)       unrar x "$1"     ;;
+            *.gz)        gunzip "$1"      ;;
+            *.tar)       tar xf "$1"      ;;
+            *.tbz2)      tar xjf "$1"     ;;
+            *.tgz)       tar xzf "$1"     ;;
+            *.zip)       unzip "$1"       ;;
+            *.Z)         uncompress "$1"  ;;
+            *.7z)        7z x "$1"        ;;
+            *)           echo "Cannot extract '$1'" ;;
+        esac
+    else
+        echo "'$1' is not a valid file"
+    fi
+}
+
+# Quick find
+qfind() {
+    find . -name "*$1*" 2>/dev/null
+}
+
+# =============================================================================
+# Local Overrides (machine-specific, not in git)
+# =============================================================================
+[[ -f ~/.bashrc.local ]] && source ~/.bashrc.local
+
+# =============================================================================
+# ble.sh - Late attach (must be at bottom)
+# =============================================================================
 [[ ! -v POETRY_ACTIVE ]] && [[ ${BLE_VERSION-} ]] && ble-attach
