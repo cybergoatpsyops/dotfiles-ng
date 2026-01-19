@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Cross-Platform Bootstrap Script v3
+# Cross-Platform Bootstrap Script v3.2
 # Supports: macOS (Intel/Apple Silicon), Ubuntu, WSL
 # 
 # Features:
@@ -10,6 +10,7 @@
 #   - --uninstall: remove all installed components
 #   - --skip <component>: skip specific installs
 #   - --status: show installation status
+#   - Auto-backup conflicting files before stowing
 #
 # Usage:
 #   ./bootstrap.sh [OPTIONS]
@@ -26,7 +27,7 @@ readonly DOTFILES_REPO="git@github.com:cybergoatpsyops/dotfiles-ng.git"
 readonly DOTFILES_DIR="$HOME/dotfiles"
 readonly STOW_PACKAGES="bash doom tmux"
 readonly NVIM_FALLBACK_VERSION="v0.11.5"
-readonly SCRIPT_VERSION="3.1.0"
+readonly SCRIPT_VERSION="3.2.0"
 
 # ============================================================================
 # OS Detection (set early, used everywhere)
@@ -116,7 +117,7 @@ ${BOLD}EXAMPLES:${NC}
     $(basename "$0") --status            # Check what's installed
 
 ${BOLD}PLATFORM NOTES:${NC}
-    macOS:  Uses Homebrew for packages, installs nvim to /usr/local/bin
+    macOS:  Uses Homebrew for packages, installs nvim via brew
     Linux:  Uses apt for packages, installs nvim to /opt
     WSL:    Same as Linux, with WSL-specific detection
 
@@ -222,6 +223,16 @@ get_file_size() {
         stat -f%z "$file" 2>/dev/null || echo 0
     else
         stat -c%s "$file" 2>/dev/null || echo 0
+    fi
+}
+
+# Backup a file if it exists and is not a symlink
+backup_if_exists() {
+    local file="$1"
+    if [[ -e "$file" ]] && [[ ! -L "$file" ]]; then
+        local backup="${file}.bak.$(date +%Y%m%d%H%M%S)"
+        log_warn "Backing up $file -> $backup"
+        run mv "$file" "$backup"
     fi
 }
 
@@ -642,9 +653,23 @@ do_stow_dotfiles() {
     for pkg in $STOW_PACKAGES; do
         if [[ -d "$pkg" ]]; then
             log_info "Stowing $pkg..."
+            
+            # First, unstow any existing symlinks
             run stow -D "$pkg" 2>/dev/null || true
+            
+            # Backup conflicting files before stowing
+            # Get list of files that would be stowed
+            local pkg_files
+            pkg_files=$(find "$pkg" -type f -printf '%P\n' 2>/dev/null || find "$pkg" -type f | sed "s|^$pkg/||")
+            
+            for f in $pkg_files; do
+                local target="$HOME/$f"
+                backup_if_exists "$target"
+            done
+            
+            # Now stow should work
             if ! run stow -v "$pkg" 2>&1; then
-                log_warn "Conflict stowing $pkg - try: stow --adopt $pkg"
+                log_warn "Failed to stow $pkg - check for conflicts"
             fi
         else
             log_warn "Package not found: $pkg"
@@ -686,6 +711,8 @@ do_uninstall_oh_my_tmux() {
     run rm -rf "$HOME/.tmux"
     run rm -f "$HOME/.tmux.conf"
     run rm -f "$HOME/.tmux.conf.local"
+    # Clean up backup files
+    run rm -f "$HOME"/.tmux.conf.bak.* 2>/dev/null || true
 }
 
 do_uninstall_bash_it() {
@@ -714,21 +741,34 @@ do_uninstall_dotfiles() {
         cd "$HOME"
     fi
     
-    if confirm "Remove dotfiles repo ($DOTFILES_DIR)?"; then
+    # Clean up backup files created by stowing
+    log_info "Cleaning up backup files..."
+    run rm -f "$HOME"/.bashrc.bak.* 2>/dev/null || true
+    run rm -f "$HOME"/.bash_profile.bak.* 2>/dev/null || true
+    run rm -f "$HOME"/.tmux.conf.local.bak.* 2>/dev/null || true
+    run rm -f "$HOME"/.inputrc.bak.* 2>/dev/null || true
+    run rm -f "$HOME"/.blerc.bak.* 2>/dev/null || true
+    
+    # DON'T delete dotfiles repo by default - it contains this script!
+    echo ""
+    echo -e "${YELLOW}NOTE: The dotfiles repo contains this script.${NC}"
+    echo -e "${YELLOW}Deleting it means you'll need to re-download to reinstall.${NC}"
+    echo ""
+    if confirm "Remove dotfiles repo ($DOTFILES_DIR)?" "n"; then
         run rm -rf "$DOTFILES_DIR"
         log_remove "dotfiles repo"
     else
-        log_info "Keeping dotfiles repo"
+        log_info "Keeping dotfiles repo at $DOTFILES_DIR"
     fi
 }
 
 do_restore_default_bashrc() {
     log_info "Restoring default shell config..."
     
-    # Remove symlinks
-    run rm -f "$HOME/.bashrc"
-    run rm -f "$HOME/.bash_profile"
-    run rm -f "$HOME/.inputrc"
+    # Remove symlinks (not regular files - those were already handled)
+    [[ -L "$HOME/.bashrc" ]] && run rm -f "$HOME/.bashrc"
+    [[ -L "$HOME/.bash_profile" ]] && run rm -f "$HOME/.bash_profile"
+    [[ -L "$HOME/.inputrc" ]] && run rm -f "$HOME/.inputrc"
     
     if is_macos; then
         # macOS: create minimal .bash_profile
@@ -826,7 +866,7 @@ run_uninstall() {
     should_skip "oh-my-tmux"|| echo "  • oh-my-tmux (~/.tmux)"
     should_skip "bash-it"   || echo "  • bash-it (~/.bash_it)"
     should_skip "blesh"     || echo "  • ble.sh (~/.local/share/blesh)"
-    should_skip "dotfiles"  || echo "  • dotfiles (symlinks + optionally repo)"
+    should_skip "dotfiles"  || echo "  • dotfiles symlinks (repo kept by default)"
     should_skip "bashrc"    || echo "  • Custom shell config (restore default)"
     
     echo ""
