@@ -25,7 +25,7 @@ set -euo pipefail
 # ============================================================================
 readonly DOTFILES_REPO="git@github.com:cybergoatpsyops/dotfiles-ng.git"
 readonly DOTFILES_DIR="$HOME/dotfiles"
-readonly STOW_PACKAGES="bash doom tmux"
+readonly STOW_PACKAGES="bash doom tmux nvim"
 readonly NVIM_FALLBACK_VERSION="v0.11.5"
 readonly SCRIPT_VERSION="3.2.0"
 
