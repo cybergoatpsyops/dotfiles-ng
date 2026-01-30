@@ -49,3 +49,4 @@
 ;; (unpin! t)
 (package! evil-terminal-cursor-changer)
 (package! org-modern)
+(package! exec-path-from-shell)
