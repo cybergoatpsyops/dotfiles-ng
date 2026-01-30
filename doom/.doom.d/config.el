@@ -105,6 +105,24 @@
 ;;   :config
 ;;   (setq org-modern-star ["⬢" "⬡" "▶" "▷" "◉"]))
 
-;; Ensure GUI Emacs inherits shell PATH
+;; Ensure GUI Emacs inherits shell PATH (hardcoded to avoid shell startup delays)
 (when (memq window-system '(mac ns x))
-  (exec-path-from-shell-initialize))
+  (setenv "PATH" (concat "/opt/homebrew/bin:/usr/local/bin:" (getenv "PATH")))
+  (add-to-list 'exec-path "/opt/homebrew/bin")
+  (add-to-list 'exec-path "/usr/local/bin"))
+
+;; Prevent network timeout hangs on startup
+(setq url-queue-timeout 5)
+
+;; Defer git-commit loading
+(setq doom-incremental-idle-timer 1.5)  ; wait longer before background loading
+
+;; Don't let magit pre-load on startup
+(after! magit
+  (setq magit-auto-revert-mode nil)
+  (setq magit-refresh-status-buffer nil))
+
+;; Prevent git-commit from loading eagerly
+;;(setq-default global-git-commit-mode nil)
+;; Or more surgical - remove it from first-file-hook
+(remove-hook 'doom-first-file-hook #'global-git-commit-mode)
